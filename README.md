@@ -1,31 +1,97 @@
 # CLIENT repo - https://github.com/codarbind/queuesockets-frontend.git
 
-# Technical Test for Backend Engineering Role
+# Backend Service for Data Queue Management
 
-## Problem Statement
+This backend service processes incoming data sent from clients at regular intervals, manages data using a message queue, and batches writes to a MySQL database. This architecture helps optimize performance by handling data from thousands of concurrent users more efficiently.
 
-Your client application sends data to the server every 5 minutes through a socket connection. When data is received from thousands of users at once, the app suffers performance issues because each message writes directly to the database. To address this, create a message queue service that manages socket data, batching writes to the database to improve efficiency.
+## Features
+- **Socket.io** connection to handle continuous data transmission from clients.
+- **Bull** message queue to manage and batch the incoming data, reducing direct database write frequency.
+- **MySQL** integration for storing data in a relational database.
 
-## Expectations
+## Table of Contents
+- [Requirements](#requirements)
+- [Setup Instructions](#setup-instructions)
+- [Environment Variables](#environment-variables)
+- [How It Works](#how-it-works)
+- [Running Tests](#running-tests)
 
-1. **Backend Server**
+## Requirements
 
-   - Use **Node.js** with **Express.js** to set up a backend server that includes a socket server.
-   - Integrate **MySQL** as the database (local MySQL setup is acceptable as long as it functions with MySQL).
-   - Implement a message queue in the backend to process incoming JSON data and batch-write to the database.
+- **Node.js** (v14 or later)
+- **MySQL** (database - local or cloud setup)
+- **Redis** (for the message queue - local or cloud setup)
+- **Socket.io** (for real-time client-server communication)
 
-2. **Frontend**
+## Setup Instructions
+1. **Clone the repository**:
+```bash
+git clone https://github.com/codarbind/technical-accessment
+cd technical-accessment
+```
+2. **Install dependencies**:
+```bash
+npm install
+```
+3. **Set up MySQL Database**:
+* Ensure MySQL is installed and running locally or on a cloud setup.
+* Create a new MySQL database (e.g., `data_queue_db`) for the service.
+* Run the following SQL command to create the required `messages` table:
+```sql
+CREATE TABLE messages (
+msg_id VARCHAR(50) PRIMARY KEY,
+message TEXT,
+user_id VARCHAR(50),
+timestamp DATETIME
+);
+```
+4. **Set up Redis**:
+* Ensure Redis is installed and running locally or set up with a cloud provider .
+* Configure Redis to match your environment or cloud setup.
+5. **Create and Configure .env File**:
+* In the root of your project directory, create a `.env` file with the following environment variables:
+```plaintext
+# Server Configuration
 
-   - Build a simple client-side app that sends a JSON payload to the backend every 5 minutes via a socket connection.
+# Database Configuration
+DB_HOST=
+DB_PORT=
+DB_USER=
+DB_PASSWORD=
+DB_NAME=
 
-3. **Code Quality**
-   - Write **clean, readable, and DRY code** for both the frontend and backend.
-   - Use a clear structure and modular code organization.
+# Redis Configuration
+REDIS_HOST=
+REDIS_PORT=
+REDIS_PASSWORD=
 
-## Submission Guidelines
+#client
+CLIENT_URL= "http://localhost:5173" #default
 
-- **Repository**: Clone this repo, create a new branch with your name, and work on your solution in that branch.
-- **Pull Request**: Once complete, raise a PR against the `qa` branch and tag @desmondsanctity.
-- **Deadline**: You have **3 days** to complete and submit your solution.
+#batch
 
-If you have any questions, please feel free to reach out. We look forward to seeing your approach!
+BATCH_SIZE_THRESHOLD=1000 #max size of messages to wait for before processing
+PORT=3000 # Specify the port on which the server will run
+```
+6. **Start server:
+```bash
+npm run dev
+```
+This will start the backend service on `http://localhost:3000\`.
+
+
+# How It Works
+## Workflow
+1. **Client Connection**: Clients establish a connection with the backend using Socket.io. The client sends JSON data every second, to simulate heavy traffic.
+2. **Data Handling and Queueing**: Incoming data is received by the `socketController` , where it's validated and added to a redis queue via Bull.
+3. **Batch Processing**:
+* The size of the queue is checked every 5 secs to see if the threshold has been hit, and ready for processing.
+* When the queue reaches a certain threshold (BATCH_SIZE_THRESHOLD), the service triggers a batch insert into database.
+* This reduces the frequency of direct writes to MySQL, improving performance during high traffic.
+* Failed jobs are configured to be retried
+* Successfully processed jobs are removed from the queue
+4. **Database Storage**: The batched data is then inserted into the `messages` table in MySQL.
+## Error Handling
+* **Queue Failures**: In case of Redis or Bull queue failures, errors are logged, and a retry mechanism is in place.
+* **Database Failures**: Database errors are handled with error logging, and failed batch operations are retried.
+* When the backend service is down, the client saves the jobs in its buffer till the backend service is up, ensuring that no message is lost despite downtime
